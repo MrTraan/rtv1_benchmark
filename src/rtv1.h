@@ -82,7 +82,7 @@ struct		Camera
 	Vec3 vertical;
 	Vec3 light;
 
-	Ray GetRay(float u, float v) {
+	Ray GetRay(float u, float v) const {
 		return Ray(origin, lowerLeftCorner + horizontal * u + vertical * v - origin);
 	}
 };
