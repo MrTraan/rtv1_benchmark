@@ -2,6 +2,10 @@
 
 #include <math.h>
 
+constexpr float PI = 3.14159265358979323846f;
+
+typedef unsigned char uint8;
+
 struct Vec3 {
 	float x;
 	float y;
@@ -61,7 +65,7 @@ struct Sphere {
 struct		Camera
 {
 	Camera(Vec3 lookfrom, Vec3 lookat, Vec3 vup, float vfov, float aspect) {
-		float theta = vfov * M_PI / 180;
+		float theta = vfov * PI / 180;
 		float halfHeight = tanf(theta / 2);
 		float halfWidth = aspect * halfHeight;
 		origin = lookfrom;

@@ -1,10 +1,13 @@
-#include <SDL.h>
 #include "rtv1.h"
 #include <math.h>
 #include <float.h>
-#include <assert.h>
 #include <stdio.h>
 #include <time.h>
+#include <chrono>
+
+#define STBI_MSC_SECURE_CRT
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "extern/stb_image_write.h"
 
 constexpr int WIN_WIDTH = 1200;
 constexpr int WIN_HEIGHT = 600;
@@ -25,11 +28,6 @@ Vec3 RandomInUnitSphere() {
 		p = Vec3( FltRand(), FltRand(), FltRand() ) * 2.0f - Vec3( 1, 1, 1 );
 	} while ( p.SqLength() >= 1.0f );
 	return p;
-}
-
-void PutPixelAt( SDL_Surface * surface, int x, int y, Uint8 r, Uint8 g, Uint8 b ) {
-	Uint32 * pixel = (Uint32 *)( surface->pixels ) + x + y * surface->w;
-	*pixel = SDL_MapRGBA( surface->format, r, g, b, 255 );
 }
 
 bool Sphere::Hit(const Ray & r, float t_min, float t_max, HitRecord & rec) const {
@@ -100,23 +98,6 @@ Vec3 computeRayColor( const Ray & r, Sphere * spheres, size_t numSpheres ) {
 //  Main loop
 //---------------------------------------------------------------------------
 int main( int argc, char * argv[] ) {
-	// Initialize
-	SDL_Window * sdlWindow = nullptr;
-
-	// Initialize SDL
-	int rc = SDL_Init( SDL_INIT_VIDEO );
-	assert( rc >= 0 );
-	(void)rc;
-
-	// Create SDL window
-	sdlWindow = SDL_CreateWindow( "CMakeDemo", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, WIN_WIDTH, WIN_HEIGHT, SDL_WINDOW_SHOWN );
-	assert( sdlWindow );
-	SDL_ShowWindow( sdlWindow );
-
-	SDL_Surface * screenSurface = SDL_GetWindowSurface( sdlWindow );
-
-	SDL_LockSurface( screenSurface );
-
 	Camera cam(
 		Vec3(0, 2, -3),
 		Vec3(0, 0, 0),
@@ -126,26 +107,30 @@ int main( int argc, char * argv[] ) {
 	);
 
 	Material mat1;
-	mat1.ambiant = 0.2;
-	mat1.diffuse = 0.5;
-	mat1.specular = 0.3;
-	mat1.color = Vec3( 0.8, 0.8, 0.0 ) * 255;
+	mat1.ambiant = 0.2f;
+	mat1.diffuse = 0.5f;
+	mat1.specular = 0.3f;
+	mat1.color = Vec3( 0.8f, 0.8f, 0.0f ) * 255.0f;
 	Material mat2 = mat1;
-	mat2.color = Vec3( 0.8, 0.3, 0.3 ) * 255;
+	mat2.color = Vec3( 0.8f, 0.3f, 0.3f ) * 255.0f;
 
 	size_t numSpheres = 20 * 20;
 	Sphere * spheres = new Sphere[ numSpheres ];
 	for ( int x = 0; x < 20; x++) {
 		for ( int y = 0; y < 20; y++ ) {
-			spheres[ y + x * 20 ].center = Vec3(x - 12, 0, y - 4);
-			spheres[ y + x * 20 ].radius = 0.20;
+			spheres[ y + x * 20 ].center = Vec3(x - 12.0f, .0f, y - 4.0f);
+			spheres[ y + x * 20 ].radius = 0.20f;
 			spheres[ y + x * 20 ].material = mat1;
 		} 
 	}
 
 	constexpr int samples = 20;
 
-	Uint32 startTime = SDL_GetTicks();
+	uint8 * imageData = new uint8[ WIN_HEIGHT * WIN_WIDTH * 4 ];
+	uint8 * imagePtr = imageData;
+
+	auto startTime = std::chrono::high_resolution_clock::now();
+
 	for ( int y = 0; y < WIN_HEIGHT; y++ ) {
 		for ( int x = 0; x < WIN_WIDTH; x++ ) {
 			Vec3 color;
@@ -156,48 +141,22 @@ int main( int argc, char * argv[] ) {
 				color += computeRayColor( r, spheres, numSpheres );
 			}
 			color = color / samples;
-			PutPixelAt( screenSurface, x, WIN_HEIGHT - y - 1, ( Uint8 )( color.x ), ( Uint8 )( color.y ), ( Uint8 )( color.z ) );
+			imageData[0] = ( uint8 )( color.x );
+			imageData[1] = ( uint8 )( color.y );
+			imageData[2] = ( uint8 )( color.z );
+			imageData[3] = 255;
+			imageData += 4;
 		}
 	}
-	Uint32 endTime = SDL_GetTicks();
-	printf("Total time: %dms\n", endTime - startTime);
+	auto endTime = std::chrono::high_resolution_clock::now();
+	printf( "Total time: %lldms\n", std::chrono::duration_cast<std::chrono::milliseconds>( endTime - startTime ).count() );
 
-	SDL_UnlockSurface( screenSurface );
-	SDL_UpdateWindowSurface( sdlWindow );
+	// write resulting image as PNG
+	stbi_flip_vertically_on_write (1);
+	stbi_write_png ("output.png", WIN_WIDTH, WIN_HEIGHT, 4, imagePtr, WIN_WIDTH * 4);
 
-	// Main loop
-	Uint32	lastTick = SDL_GetTicks();
-	int		running = 1;
-	while ( running ) {
-		Uint32 now = SDL_GetTicks();
-		if ( now - lastTick < 16 ) {
-			SDL_Delay( 16 - ( now - lastTick ) );
-			now = SDL_GetTicks();
-		}
-		lastTick = now;
 
-		// Handle SDL events
-		SDL_Event event;
-		while ( SDL_PollEvent( &event ) ) {
-			switch ( event.type ) {
-				case SDL_MOUSEBUTTONDOWN:
-				case SDL_MOUSEBUTTONUP: {
-					break;
-				}
-
-				case SDL_WINDOWEVENT: {
-					if ( event.window.event == SDL_WINDOWEVENT_CLOSE ) {
-						running = 0;
-					}
-					break;
-				}
-			}
-		}
-
-	}
-
-	// Shutdown
-	SDL_DestroyWindow( sdlWindow );
-	SDL_Quit();
+	delete[] spheres;
+	delete[] imagePtr;
 	return 0;
 }
